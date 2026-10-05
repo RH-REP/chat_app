@@ -204,7 +204,7 @@ class CommandLineTest(unittest.TestCase):
         for _ in range(4):
             host.stdout.readline()
         # メニュー 2 → IP → 合言葉ちがい → （IP は聞かれず）正しい合言葉 → 1件送って抜ける
-        joiner = subprocess.run(base + ["--name", "相手"], input=f"2\n127.0.0.1\n0000\n5555\nやあ\n/quit\n",
+        joiner = subprocess.run(base + ["--name", "相手"], input=f"1\n2\n127.0.0.1\n0000\n5555\nやあ\n/quit\n",
                                 capture_output=True, text=True, encoding="utf-8", timeout=10)
         host_out, _ = host.communicate(timeout=10)
         self.assertEqual(joiner.stdout.count("ホストの IP >"), 1, joiner.stdout)
