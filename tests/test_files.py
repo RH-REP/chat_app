@@ -114,8 +114,8 @@ class NameTest(unittest.TestCase):
     def test_unique_path(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            (d / "a.txt").write_text("x")
-            (d / "a (1).txt").write_text("x")
+            (d / "a.txt").write_text("x", encoding="utf-8")
+            (d / "a (1).txt").write_text("x", encoding="utf-8")
             self.assertEqual(chat.unique_path(d, "a.txt").name, "a (2).txt")
             self.assertEqual(chat.unique_path(d, "b.txt").name, "b.txt")
 
@@ -152,18 +152,18 @@ class TransferTest(unittest.TestCase):
         self.assertEqual(self.leftovers(), [])
 
     def test_same_name_is_renamed(self):
-        (self.src / "a.txt").write_text("新しい")
+        (self.src / "a.txt").write_text("新しい", encoding="utf-8")
         self.dst.mkdir()
-        (self.dst / "a.txt").write_text("前からある")
+        (self.dst / "a.txt").write_text("前からある", encoding="utf-8")
         s = Session(self.dst)
         self.assertEqual(s.send(self.src / "a.txt"), "a (1).txt")
         s.bye()
-        self.assertEqual((self.dst / "a.txt").read_text(), "前からある")
-        self.assertEqual((self.dst / "a (1).txt").read_text(), "新しい")
+        self.assertEqual((self.dst / "a.txt").read_text(encoding="utf-8"), "前からある")
+        self.assertEqual((self.dst / "a (1).txt").read_text(encoding="utf-8"), "新しい")
 
     def test_declined_file_then_next_file_in_same_session(self):
-        (self.src / "no.txt").write_text("x")
-        (self.src / "yes.txt").write_text("y")
+        (self.src / "no.txt").write_text("x", encoding="utf-8")
+        (self.src / "yes.txt").write_text("y", encoding="utf-8")
         s = Session(self.dst, ask=lambda name, size: name == "yes.txt")
         with self.assertRaisesRegex(chat.TransferError, "断られました"):
             s.send(self.src / "no.txt")
@@ -279,7 +279,7 @@ class InterruptTest(unittest.TestCase):
             with self.assertRaises(KeyboardInterrupt):
                 chat.call_interruptibly(
                     lambda: chat.receive_files(b, rb, dst, io.StringIO(), lambda n, s: True),
-                    on_interrupt=lambda: chat._shutdown(b))
+                    on_interrupt=lambda: chat._abort(b))
             self.assertEqual(list(dst.iterdir()), [])
             rb.close(); a.close(); b.close()
 
@@ -309,7 +309,7 @@ class CommandLineTest(unittest.TestCase):
                                     stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
             banner = [recv.stdout.readline() for _ in range(5)]
             self.assertIn("ファイルの受け取り待ち", banner[0])
-            self.assertIn(str(d / "in"), banner[3])
+            self.assertIn(str((d / "in").resolve()), banner[3])  # Windows の短い名前（RUNNER~1）を長い名前に
             send = subprocess.run(base + ["--send", "127.0.0.1", str(src)],
                                   capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=20)
             out, _ = recv.communicate(timeout=20)
@@ -321,8 +321,8 @@ class CommandLineTest(unittest.TestCase):
     def test_menu_flow_with_confirmation(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            (d / "a.txt").write_text("A")
-            (d / "b.txt").write_text("B")
+            (d / "a.txt").write_text("A", encoding="utf-8")
+            (d / "b.txt").write_text("B", encoding="utf-8")
             port = free_port()
             base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port), "--code", "8888"]
             # 受け手: 2) ファイル → 1) 受信。a は y、b は n

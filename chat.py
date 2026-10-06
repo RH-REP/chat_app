@@ -127,13 +127,10 @@ class Peer:
             pass
 
     def close(self) -> None:
-        # 先に shutdown して、別スレッドの readline を起こす。
+        # 先に別スレッドの readline を起こす。
         # 読んでいる最中に reader を閉じると、バッファのロック待ちで止まる。
         self.closed_by_me = True
-        try:
-            self.sock.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
+        _abort(self.sock)
         try:
             self._reader.close()
         finally:
@@ -569,11 +566,26 @@ def call_interruptibly(fn: Callable[[], T], on_interrupt: Callable[[], None] | N
     return box["value"]
 
 
-def _shutdown(sock: socket.socket) -> None:
+def _abort(sock: socket.socket) -> None:
+    """別スレッドが recv で待っている接続を切り、その recv を起こす。
+
+    POSIX は shutdown で起きる。Windows は shutdown では起きないので、ハンドルも閉じる
+    （makefile が参照を持っていると sock.close() ではハンドルが閉じないため、detach して閉じる）。
+    """
     try:
         sock.shutdown(socket.SHUT_RDWR)
     except OSError:
         pass
+    if sys.platform == "win32":
+        try:
+            fd = sock.detach()
+        except OSError:
+            return
+        if fd != -1:
+            try:
+                socket.close(fd)
+            except OSError:
+                pass
 
 
 def _ask(prompt: str) -> str:
@@ -638,7 +650,7 @@ def run_receiver(args: argparse.Namespace, name: str) -> int:
     try:
         saved = call_interruptibly(
             lambda: receive_files(sock, rfile, save_dir, sys.stdout, ask, max_size=args.max_size * 1024**2),
-            on_interrupt=lambda: _shutdown(sock))
+            on_interrupt=lambda: _abort(sock))
     except ConnectionError as exc:
         print(f"[中断] {exc}", flush=True)
         return 1
@@ -682,7 +694,7 @@ def run_sender(args: argparse.Namespace, name: str) -> int:
         return failures
 
     try:
-        call_interruptibly(work, on_interrupt=lambda: _shutdown(sock))
+        call_interruptibly(work, on_interrupt=lambda: _abort(sock))
     except ConnectionError as exc:
         print(f"[中断] {exc}", flush=True)
         return 1
