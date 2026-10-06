@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import io
+import os
 import socket
 import subprocess
 import sys
@@ -18,6 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import chat  # noqa: E402
+
+# Windows の既定（cp1252 など）でも、子プロセスの入出力を UTF-8 にする
+ENV = {**os.environ, "PYTHONUTF8": "1"}
 
 
 def start_host(code: str = "1234", name: str = "ホスト"):
@@ -200,12 +204,12 @@ class CommandLineTest(unittest.TestCase):
         port = free_port()
         base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port)]
         host = subprocess.Popen(base + ["--host", "--code", "5555", "--name", "ホスト"], stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, text=True, encoding="utf-8")
+                                stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
         for _ in range(4):
             host.stdout.readline()
         # メニュー 2 → IP → 合言葉ちがい → （IP は聞かれず）正しい合言葉 → 1件送って抜ける
         joiner = subprocess.run(base + ["--name", "相手"], input=f"1\n2\n127.0.0.1\n0000\n5555\nやあ\n/quit\n",
-                                capture_output=True, text=True, encoding="utf-8", timeout=10)
+                                capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=10)
         host_out, _ = host.communicate(timeout=10)
         self.assertEqual(joiner.stdout.count("ホストの IP >"), 1, joiner.stdout)
         self.assertEqual(joiner.stdout.count("合言葉 >"), 2)
@@ -215,7 +219,7 @@ class CommandLineTest(unittest.TestCase):
         port = free_port()
         cmd = [sys.executable, str(ROOT / "chat.py"), "--port", str(port), "--code", "4821"]
         host = subprocess.Popen(cmd + ["--host", "--name", "ホスト"], stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, text=True, encoding="utf-8")
+                                stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
         banner = [host.stdout.readline() for _ in range(4)]
         self.assertIn("ホストとして待機中", banner[0])
         self.assertIn(f":{port}", banner[1])          # 既定でないポートは IP に付けて見せる
@@ -223,7 +227,7 @@ class CommandLineTest(unittest.TestCase):
 
         joiner = subprocess.run(
             cmd + ["--join", f"127.0.0.1", "--name", "相手"],
-            input="こんにちは\n/quit\n", capture_output=True, text=True, encoding="utf-8", timeout=10,
+            input="こんにちは\n/quit\n", capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=10,
         )
         host_out, _ = host.communicate(timeout=10)
         self.assertEqual(joiner.returncode, 0, joiner.stderr)
@@ -236,11 +240,11 @@ class CommandLineTest(unittest.TestCase):
         port = free_port()
         base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port)]
         host = subprocess.Popen(base + ["--host", "--code", "1111"], stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, text=True, encoding="utf-8")
+                                stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
         for _ in range(4):
             host.stdout.readline()
         bad = subprocess.run(base + ["--join", "127.0.0.1", "--code", "2222"],
-                             capture_output=True, text=True, encoding="utf-8", timeout=10)
+                             capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=10)
         self.assertEqual(bad.returncode, 1)
         self.assertIn("合言葉がちがいます", bad.stdout)
         self.assertIn("[断りました]", host.stdout.readline())

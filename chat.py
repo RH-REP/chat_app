@@ -26,7 +26,9 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import BinaryIO, Callable, Iterator, TextIO
+from typing import BinaryIO, Callable, Iterator, TextIO, TypeVar
+
+T = TypeVar("T")
 
 DEFAULT_PORT = 5050          # 5000 は macOS の AirPlay 受信が使うので避ける
 MAX_MESSAGE_LENGTH = 4096
@@ -325,15 +327,26 @@ def human_size(n: float) -> str:
     return f"{n:.1f} GB"
 
 
+WINDOWS_BAD_CHARS = set('<>:"/\\|?*')
+WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
 def safe_file_name(name: object) -> str:
-    """相手から来たファイル名を、保存先の中だけに収まる名前として確かめる。"""
+    """相手から来たファイル名を、保存先の中だけに収まる名前として確かめる。
+
+    受け取る OS によらず、Windows でも使える名前だけを通す。
+    Windows では「:」が NTFS の代替データストリームの区切りになり、別のファイルに書き込まれうる。
+    """
     if not isinstance(name, str):
         raise TransferError("ファイル名がありません")
-    if (not name or name in (".", "..") or "/" in name or "\\" in name or "\0" in name
-            or any(ord(c) < 32 for c in name)):
+    if (not name or name in (".", "..") or any(c in WINDOWS_BAD_CHARS or ord(c) < 32 for c in name)):
         raise TransferError(f"使えないファイル名です: {name!r}")
     if name.startswith("."):
         raise TransferError(f"隠しファイルの名前は受け取りません: {name!r}")
+    if name.endswith((".", " ")):
+        raise TransferError(f"末尾が「.」か空白の名前は Windows で使えません: {name!r}")
+    if name.split(".")[0].strip().upper() in WINDOWS_RESERVED:
+        raise TransferError(f"Windows の予約名です: {name!r}")
     if len(name.encode("utf-8")) > 200:
         raise TransferError("ファイル名が長すぎます")
     return name
@@ -525,6 +538,44 @@ def join_send(address: str, code: str, name: str, default_port: int = DEFAULT_PO
     return _join_raw(address, code, name, "FILES", default_port)
 
 
+def call_interruptibly(fn: Callable[[], T], on_interrupt: Callable[[], None] | None = None) -> T:
+    """fn を別スレッドで動かし、主スレッドは短い間隔で待って Ctrl+C を受けられるようにする。
+
+    Windows では、ソケットの accept や recv で止まっている主スレッドに Ctrl+C が届かない。
+    Ctrl+C を受けたら on_interrupt（ソケットを閉じるなど）で fn を起こし、後始末を少し待ってから伝える。
+    """
+    box: dict = {}
+    done = threading.Event()  # Thread.join は Ctrl+C で中断されると、次の join がすぐ戻ってしまう
+
+    def run() -> None:
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # 主スレッドで投げ直す
+            box["error"] = exc
+        finally:
+            done.set()
+
+    threading.Thread(target=run, daemon=True).start()
+    try:
+        while not done.wait(0.2):
+            pass
+    except KeyboardInterrupt:
+        if on_interrupt:
+            on_interrupt()
+        done.wait(2)  # 一時ファイルの削除などを待つ
+        raise
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
+def _shutdown(sock: socket.socket) -> None:
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+
+
 def _ask(prompt: str) -> str:
     try:
         return input(prompt)
@@ -573,7 +624,8 @@ def run_receiver(args: argparse.Namespace, name: str) -> int:
     save_dir = Path(args.save_dir).expanduser().resolve()
     code = args.code or new_code()
     banner = _ready_banner("ファイルの受け取り待ち", code, [f"  保存先: {save_dir}"])
-    sock, peer = host_receive(code, name, port=args.port, on_ready=banner, on_reject=_print_reject)
+    sock, peer = call_interruptibly(
+        lambda: host_receive(code, name, port=args.port, on_ready=banner, on_reject=_print_reject))
     print(f"{peer} とつながりました。送られてくるのを待ちます", flush=True)
 
     def ask(file_name: str, size: int) -> bool:
@@ -584,7 +636,9 @@ def run_receiver(args: argparse.Namespace, name: str) -> int:
 
     rfile = sock.makefile("rb")
     try:
-        saved = receive_files(sock, rfile, save_dir, sys.stdout, ask, max_size=args.max_size * 1024**2)
+        saved = call_interruptibly(
+            lambda: receive_files(sock, rfile, save_dir, sys.stdout, ask, max_size=args.max_size * 1024**2),
+            on_interrupt=lambda: _shutdown(sock))
     except ConnectionError as exc:
         print(f"[中断] {exc}", flush=True)
         return 1
@@ -605,7 +659,9 @@ def run_sender(args: argparse.Namespace, name: str) -> int:
     queue = [Path(f) for f in args.files]
     interactive = not queue
     failures = 0
-    try:
+
+    def work() -> int:
+        nonlocal failures
         while True:
             if queue:
                 path = queue.pop(0)
@@ -613,7 +669,7 @@ def run_sender(args: argparse.Namespace, name: str) -> int:
                 text = _ask("送るファイル（空で終了） > ").strip()
                 if not text:
                     break
-                path = Path(text.strip("'\"")).expanduser()  # Finder からドラッグした引用符を外す
+                path = Path(text.strip("'\"")).expanduser()  # Finder やエクスプローラーからドラッグした引用符を外す
             else:
                 break
             try:
@@ -623,6 +679,10 @@ def run_sender(args: argparse.Namespace, name: str) -> int:
                 failures += 1
                 print(f"[送れません] {exc}", flush=True)
         send_frame(sock, BYE)
+        return failures
+
+    try:
+        call_interruptibly(work, on_interrupt=lambda: _shutdown(sock))
     except ConnectionError as exc:
         print(f"[中断] {exc}", flush=True)
         return 1
@@ -671,8 +731,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_receiver(args, name) if args.receive else run_sender(args, name)
         if args.host:
             code = args.code or new_code()
-            peer = host_wait(code, name, port=args.port,
-                             on_ready=_ready_banner("ホストとして待機中", code), on_reject=_print_reject)
+            peer = call_interruptibly(lambda: host_wait(
+                code, name, port=args.port, on_ready=_ready_banner("ホストとして待機中", code), on_reject=_print_reject))
         else:
             peer = _join_loop(args, args.join, lambda a, c: join(a, c, name, default_port=args.port))
             if peer is None:
