@@ -6,9 +6,9 @@
 
   python3 chat.py                              # メニューから選ぶ
   python3 chat.py --host                       # チャットのホストになる
-  python3 chat.py --join 192.168.11.53         # チャットのホストにつなぐ（合言葉は聞かれる）
+  python3 chat.py --join 192.168.0.9           # チャットのホストにつなぐ（合言葉は聞かれる）
   python3 chat.py --receive                    # ファイルを受け取る側として待つ
-  python3 chat.py --send 192.168.11.53 a.pdf   # ファイルを送る
+  python3 chat.py --send 192.168.0.9 a.pdf     # ファイルを送る
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def new_code() -> str:
 
 
 def parse_address(text: str, default_port: int = DEFAULT_PORT) -> tuple[str, int]:
-    """'192.168.11.53' や '192.168.11.53:6000' を (host, port) にする。"""
+    """'192.168.0.9' や '192.168.0.9:6000' を (host, port) にする。"""
     text = text.strip()
     if not text:
         raise ChatError("IP が空です")

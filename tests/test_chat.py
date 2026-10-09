@@ -63,8 +63,8 @@ class AddressTest(unittest.TestCase):
         self.assertFalse(ip.startswith("127."))
 
     def test_parse_address(self):
-        self.assertEqual(chat.parse_address("192.168.11.53"), ("192.168.11.53", chat.DEFAULT_PORT))
-        self.assertEqual(chat.parse_address(" 192.168.11.53:6000 "), ("192.168.11.53", 6000))
+        self.assertEqual(chat.parse_address("192.168.0.9"), ("192.168.0.9", chat.DEFAULT_PORT))
+        self.assertEqual(chat.parse_address(" 192.168.0.9:6000 "), ("192.168.0.9", 6000))
         self.assertEqual(chat.parse_address("pc-a.local", 7000), ("pc-a.local", 7000))
         for bad in ("", "1.2.3.4:x", "1.2.3.4:70000"):
             with self.assertRaises(chat.ChatError):
