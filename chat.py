@@ -22,6 +22,7 @@ import secrets
 import shutil
 import socket
 import struct
+import subprocess
 import sys
 import threading
 import time
@@ -602,6 +603,32 @@ def _ask_choice(prompt: str) -> str:
             return choice
 
 
+def _host_code(args: argparse.Namespace) -> str:
+    """待つ側の合言葉。--code があればそれ、無ければ 4 桁を聞く（空ならランダム）。"""
+    if args.code:
+        return args.code
+    while True:
+        text = _ask("合言葉（4桁の数字、空でランダム） > ").strip()
+        if not text:
+            return new_code()
+        if len(text) == 4 and text.isascii() and text.isdigit():
+            return text
+        print("4桁の数字で入れてください", flush=True)
+
+
+def open_folder(folder: Path) -> None:
+    """フォルダを Finder / エクスプローラー / ファイルマネージャーで開く。開けなくても止めない。"""
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(folder))  # type: ignore[attr-defined]
+        else:
+            opener = "open" if sys.platform == "darwin" else "xdg-open"
+            # 終わるまで待つ（Popen のまま抜けると、すぐ後の終了で一緒に止められて開かないことがある）
+            subprocess.run([opener, str(folder)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"[注意] 保存先を開けませんでした: {exc}", flush=True)
+
+
 def _ready_banner(title: str, code: str, extra: list[str] | None = None) -> Callable[[int], None]:
     def ready(port: int) -> None:
         print(title, flush=True)
@@ -634,7 +661,7 @@ def _join_loop(args: argparse.Namespace, address: str | None, connect: Callable[
 
 def run_receiver(args: argparse.Namespace, name: str) -> int:
     save_dir = Path(args.save_dir).expanduser().resolve()
-    code = args.code or new_code()
+    code = _host_code(args)
     banner = _ready_banner("ファイルの受け取り待ち", code, [f"  保存先: {save_dir}"])
     sock, peer = call_interruptibly(
         lambda: host_receive(code, name, port=args.port, on_ready=banner, on_reject=_print_reject))
@@ -658,6 +685,9 @@ def run_receiver(args: argparse.Namespace, name: str) -> int:
         rfile.close()
         sock.close()
     print(f"[終了] {len(saved)} 件を受け取りました", flush=True)
+    # 端末で使っているときだけ開く（テストやスクリプトからの実行では開かない）
+    if saved and not args.no_open and sys.stdout.isatty():
+        open_folder(save_dir)
     return 0
 
 
@@ -713,11 +743,12 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--send", metavar="IP[:PORT]", help="ファイルの受け取り側につないで送る")
     parser.add_argument("files", nargs="*", help="--send で送るファイル（省略すると1件ずつ聞く）")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"待ち受け・接続のポート（既定 {DEFAULT_PORT}）")
-    parser.add_argument("--code", help="合言葉（ホストは省略すると毎回作る）")
+    parser.add_argument("--code", help="合言葉（待つ側は省略すると 4 桁を聞く。空ならランダム）")
     parser.add_argument("--name", default=None, help="自分の名前（既定はログイン名）")
     parser.add_argument("--save-dir", default=str(DEFAULT_SAVE_DIR), help="受け取ったファイルの保存先（既定はこのファイルの隣の received/）")
     parser.add_argument("--max-size", type=int, default=DEFAULT_MAX_FILE_SIZE // 1024**2, help="受け取る1件の上限（MB、既定 2048）")
     parser.add_argument("--yes", action="store_true", help="確認せずに受け取る")
+    parser.add_argument("--no-open", action="store_true", help="受け取り後に保存先のフォルダを開かない")
     args = parser.parse_args(argv)
     if args.files and not args.send:
         parser.error("ファイルの指定は --send と一緒に使います")
@@ -742,7 +773,7 @@ def main(argv: list[str] | None = None) -> int:
         if not is_chat:
             return run_receiver(args, name) if args.receive else run_sender(args, name)
         if args.host:
-            code = args.code or new_code()
+            code = _host_code(args)
             peer = call_interruptibly(lambda: host_wait(
                 code, name, port=args.port, on_ready=_ready_banner("ホストとして待機中", code), on_reject=_print_reject))
         else:

@@ -75,6 +75,25 @@ class AddressTest(unittest.TestCase):
             c = chat.new_code()
             self.assertRegex(c, r"^\d{4}$")
 
+    def _host_code_with(self, inputs: list[str], code: str | None = None) -> str:
+        import argparse
+        from unittest import mock
+        args = argparse.Namespace(code=code)
+        with mock.patch("builtins.input", side_effect=inputs), mock.patch("sys.stdout", io.StringIO()):
+            return chat._host_code(args)
+
+    def test_host_code_uses_typed_four_digits(self):
+        self.assertEqual(self._host_code_with(["0042"]), "0042")
+
+    def test_host_code_retries_until_four_digits(self):
+        self.assertEqual(self._host_code_with(["12", "abcd", "１２３４", "12345", "7777"]), "7777")
+
+    def test_host_code_blank_is_random(self):
+        self.assertRegex(self._host_code_with([""]), r"^\d{4}$")
+
+    def test_host_code_option_skips_prompt(self):
+        self.assertEqual(self._host_code_with([], code="9999"), "9999")
+
 
 class HandshakeTest(unittest.TestCase):
     def test_join_and_exchange_both_ways(self):
