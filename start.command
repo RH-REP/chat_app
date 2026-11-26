@@ -2,6 +2,11 @@
 # chat_app（同じ Wi-Fi の2台で使う1対1チャットとファイル送信）をダブルクリックで起動する。
 # このフォルダ（clone）の chat.py を動かす。受け取ったファイルはこのフォルダの received/ に入る（.gitignore で除外）。
 # 最新にするときは update.command（git pull --ff-only）。このフォルダでは直さない。
+# 起動の前に最新を取り込む（update.command --auto。取り込めなくても今の版で続ける）。取り込んだ新しい start.command で開き直す
+if [[ -z "${APP_START_UPDATED:-}" && -x "${0:A:h}/update.command" ]]; then
+  "${0:A:h}/update.command" --auto
+  [[ -x "${0:A}" ]] && APP_START_UPDATED=1 exec "${0:A}" "$@"
+fi
 set -u
 USE_DIR="${0:A:h}"
 if [[ ! -f "$USE_DIR/chat.py" ]]; then echo "コードが見つかりません: ${USE_DIR}/chat.py"; read; exit 1; fi
