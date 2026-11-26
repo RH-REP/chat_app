@@ -257,7 +257,7 @@
   // ---- 改善のコメント（右上の !）。発言・名前・IP は入れない ----
   if (window.AppFeedback) {
     AppFeedback.install({
-      app: "chat_app", version: "2026-11-27a", repo: "RH-REP/chat_app",
+      app: "chat_app", version: "2026-11-27b", repo: "RH-REP/chat_app",
       screenshot: "off", isPublic: true, log: false,
       getContext: () => ({ summary: "ブラウザの版・" + phase + (phase === "chat" ? (framed ? "・相手は新しいバージョン" : "・相手は古いバージョン") : "") }),
     });

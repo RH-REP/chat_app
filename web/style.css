@@ -3,17 +3,18 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: var(--size-base)/var(--line-height) var(--font-sans); }
-/* 部品の見た目は app の欄の中だけに当てる（「!」の feedback.js の窓には当てない） */
-:is(.app, .card, #chat) :is(button, input) { font: inherit; color: inherit; }
-:is(.app, .card, #chat) button { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+/* 部品の見た目は app の欄の中だけに当てる（「!」の feedback.js のウインドウには当てない）。
+   :where で強さを 0 にし、下の個別の指定（.check・.guest .card など）が勝つようにする（:is だと #chat の強さが付く）。 */
+:where(.app, .card, #chat) :is(button, input) { font: inherit; color: inherit; }
+:where(.app, .card, #chat) button { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   padding: 5px 14px; cursor: pointer; min-height: 36px; }
-:is(.app, .card, #chat) button:hover:not(:disabled) { background: var(--hover); }
-:is(.app, .card, #chat) button:disabled { opacity: .5; cursor: default; }
-:is(.app, .card, #chat) button.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-:is(.app, .card, #chat) button.pri:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
-:is(.app, .card, #chat) input { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+:where(.app, .card, #chat) button:hover:not(:disabled) { background: var(--hover); }
+:where(.app, .card, #chat) button:disabled { opacity: .5; cursor: default; }
+:where(.app, .card, #chat) button.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+:where(.app, .card, #chat) button.pri:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+:where(.app, .card, #chat) input { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   padding: 6px 10px; width: 100%; }
-:is(.app, .card, #chat) :is(input:focus, button:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+:where(.app, .card, #chat) :is(input:focus, button:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mono { font-family: var(--font-mono); }
 .muted, .hint { color: var(--muted); font-size: 13px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
