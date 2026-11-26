@@ -25,7 +25,8 @@ sys.path.insert(0, str(ROOT))
 import chat  # noqa: E402
 
 # Windows の既定（cp1252 など）でも、子プロセスの入出力を UTF-8 にする
-ENV = {**os.environ, "PYTHONUTF8": "1"}
+_STATE_DIR = tempfile.TemporaryDirectory()
+ENV = {**os.environ, "PYTHONUTF8": "1", "CHAT_APP_STATE": str(Path(_STATE_DIR.name) / "state.json")}
 
 
 def free_port() -> int:
@@ -195,7 +196,7 @@ class TransferTest(unittest.TestCase):
         chat.send_frame(s.sock, chat.DONE, json.dumps({"sha256": "0" * 64}).encode())
         kind, reason = chat.recv_frame(s.rfile)
         self.assertEqual(kind, chat.FAILED)
-        self.assertIn("SHA-256", reason.decode())
+        self.assertIn("中身の照合が合いません", reason.decode())
         s.bye()
         self.assertEqual(list(self.dst.iterdir()), [])
 
@@ -289,8 +290,8 @@ class InterruptTest(unittest.TestCase):
         port = free_port()
         p = subprocess.Popen([sys.executable, str(ROOT / "chat.py"), "--receive", "--port", str(port), "--code", "1"],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
-        for _ in range(5):
-            p.stdout.readline()
+        while "止める" not in p.stdout.readline():
+            pass
         p.send_signal(signal.SIGINT)
         out, err = p.communicate(timeout=5)
         self.assertEqual(p.returncode, 130)
@@ -307,15 +308,19 @@ class CommandLineTest(unittest.TestCase):
             base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port), "--code", "7777"]
             recv = subprocess.Popen(base + ["--receive", "--yes", "--save-dir", str(d / "in")],
                                     stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
-            banner = [recv.stdout.readline() for _ in range(5)]
-            self.assertIn("ファイルの受け取り待ち", banner[0])
-            self.assertIn(str((d / "in").resolve()), banner[3])  # Windows の短い名前（RUNNER~1）を長い名前に
+            banner = []
+            while not banner or "止める" not in banner[-1]:
+                banner.append(recv.stdout.readline())
+            self.assertIn("ファイルを待っています", banner[1])
+            self.assertIn(str((d / "in").resolve()), banner[4])  # Windows の短い名前（RUNNER~1）を長い名前に
+            self.assertIn("--send 127.0.0.1", "".join(banner).replace(chat.lan_ip(), "127.0.0.1"))
             send = subprocess.run(base + ["--send", "127.0.0.1", str(src)],
                                   capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=20)
             out, _ = recv.communicate(timeout=20)
             self.assertEqual(send.returncode, 0, send.stdout + send.stderr)
-            self.assertIn("[完了] 送る.bin", send.stdout)
-            self.assertIn("[終了] 1 件", out)
+            self.assertIn("送りました  送る.bin", send.stdout)
+            self.assertIn("1 件を受け取りました", out)
+            self.assertIn("中身の照合 OK", out)
             self.assertEqual(sha(d / "in" / "送る.bin"), sha(src))
 
     def test_menu_flow_with_confirmation(self):
@@ -325,21 +330,23 @@ class CommandLineTest(unittest.TestCase):
             (d / "b.txt").write_text("B", encoding="utf-8")
             port = free_port()
             base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port), "--code", "8888"]
-            # 受け手: 2) ファイル → 1) 受信。a は y、b は n
+            # 受け手: 3 ファイルを受け取る。a は y、b は n
             recv = subprocess.Popen(base + ["--save-dir", str(d / "in")], stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
-            recv.stdin.write("2\n1\ny\nn\n"); recv.stdin.flush()
-            while "相手に IP" not in recv.stdout.readline():
+            recv.stdin.write("3\ny\nn\n"); recv.stdin.flush()
+            while "止める" not in recv.stdout.readline():
                 pass
-            # 送り手: 2) ファイル → 2) 送信 → IP → ファイルを1件ずつ（Finder の引用符付き）→ 空行で終了
-            send = subprocess.run(base, input=f"2\n2\n127.0.0.1\n'{d / 'a.txt'}'\n{d / 'b.txt'}\n\n",
+            # 送り手: 4 ファイルを送る → IP → ファイルを1件ずつ（Finder の引用符付き）→ 空行で終了
+            send = subprocess.run(base, input=f"4\n127.0.0.1\n'{d / 'a.txt'}'\n{d / 'b.txt'}\n\n",
                                   capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=20)
             out, _ = recv.communicate(timeout=20)
             self.assertEqual(send.returncode, 1)  # 1件断られたので 1
-            self.assertIn("[完了] a.txt", send.stdout)
-            self.assertIn("[送れません] 断られました", send.stdout)
+            self.assertIn("送りました  a.txt", send.stdout)
+            self.assertIn("送れません: 断られました", send.stdout)
             self.assertEqual(sorted(p.name for p in (d / "in").iterdir()), ["a.txt"])
-            self.assertIn("[終了] 1 件", out)
+            self.assertIn("1 件を受け取りました", out)
+            self.assertIn("名前    a.txt", out)  # 受け取りの確認は行に分ける
+            self.assertIn("y 受け取る  n 断る [Enter で断る]", out)
 
 
 if __name__ == "__main__":

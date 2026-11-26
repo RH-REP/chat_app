@@ -10,6 +10,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -21,7 +22,22 @@ sys.path.insert(0, str(ROOT))
 import chat  # noqa: E402
 
 # Windows の既定（cp1252 など）でも、子プロセスの入出力を UTF-8 にする
-ENV = {**os.environ, "PYTHONUTF8": "1"}
+# 前回の選択を覚えるファイルは、repo の中でなく一時フォルダに置く
+_STATE_DIR = tempfile.TemporaryDirectory()
+ENV = {**os.environ, "PYTHONUTF8": "1", "CHAT_APP_STATE": str(Path(_STATE_DIR.name) / "state.json")}
+ENV.pop("NO_COLOR", None)
+
+
+def read_banner(stream) -> list:
+    """待機の枠を「止める」の行まで読む。"""
+    lines = []
+    while True:
+        line = stream.readline()
+        if not line:
+            raise AssertionError("待機の枠が出ないまま終わった: " + "".join(lines))
+        lines.append(line)
+        if "止める" in line:
+            return lines
 
 
 def start_host(code: str = "1234", name: str = "ホスト"):
@@ -121,7 +137,7 @@ class HandshakeTest(unittest.TestCase):
         client = chat.join(f"127.0.0.1:{port}", "1234", "正しい")
         t.join(3)
         self.assertEqual(box["peer"].name, "正しい")
-        self.assertEqual([r for _, r in rejects], ["合言葉がちがいます"])
+        self.assertEqual([r for _, r in rejects], ["合言葉がちがいます（残り 4 回）"])
         client.close(); box["peer"].close()
 
     def test_stranger_without_hello_is_rejected(self):
@@ -190,7 +206,8 @@ class MessageTest(unittest.TestCase):
         self.b.finish()
         time.sleep(0.2)
         self.assertFalse(closed.is_set(), "自分の /quit を相手の切断として扱った")
-        self.assertNotIn("[切断]", out.getvalue())
+        self.assertNotIn("接続が切れました", out.getvalue())
+        self.assertRegex(out.getvalue(), r"\d\d:\d\d 自分 › 一つ目")  # 自分の発言も時刻つきで出す
 
     def test_close_does_not_hang_while_receiving(self):
         t = threading.Thread(target=lambda: list(self.a.lines()), daemon=True)
@@ -211,8 +228,8 @@ class MessageTest(unittest.TestCase):
         self.b.send("じゃあね")
         self.b.finish()
         self.assertTrue(closed.wait(3), "相手の切断を受けても on_closed が呼ばれない")
-        self.assertIn("B> じゃあね", out.getvalue())
-        self.assertIn("[切断]", out.getvalue())
+        self.assertRegex(out.getvalue(), r"\d\d:\d\d B +› じゃあね")
+        self.assertIn("✕ B との接続が切れました", out.getvalue())
         w.close(); t.join(3); stdin.close(); r.close()
 
 
@@ -224,35 +241,49 @@ class CommandLineTest(unittest.TestCase):
         base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port)]
         host = subprocess.Popen(base + ["--host", "--code", "5555", "--name", "ホスト"], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
-        for _ in range(4):
-            host.stdout.readline()
+        read_banner(host.stdout)
         # メニュー 2 → IP → 合言葉ちがい → （IP は聞かれず）正しい合言葉 → 1件送って抜ける
-        joiner = subprocess.run(base + ["--name", "相手"], input=f"1\n2\n127.0.0.1\n0000\n5555\nやあ\n/quit\n",
+        joiner = subprocess.run(base + ["--name", "相手"], input=f"2\n127.0.0.1\n0000\n5555\nやあ\n/quit\n",
                                 capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=10)
-        host_out, _ = host.communicate(timeout=10)
-        self.assertEqual(joiner.stdout.count("ホストの IP >"), 1, joiner.stdout)
+        # 待つ側は相手が抜けたのを受けて自分で終わる。先に stdin を閉じると、待つ側が自分から
+        # 終わる道と競い、「抜けました」を出す前に終わることがある（2026-11-26、12 回に 1 回落ちた）。
+        host.wait(timeout=10)
+        host_out = host.stdout.read()
+        host.stdin.close(); host.stdout.close()
+        self.assertIn("2  チャットにつなぐ", joiner.stdout)  # メニューは 1 段
+        import re
+        self.assertEqual(len(re.findall(r"相手の IP (?:\[[^\]]*\] )?>", joiner.stdout)), 1, joiner.stdout)
         self.assertEqual(joiner.stdout.count("合言葉 >"), 2)
-        self.assertIn("相手> やあ", host_out)
+        self.assertIn("残り 4 回", joiner.stdout)
+        self.assertRegex(host_out, r"相手 › やあ")
 
     def test_host_and_join_processes_talk(self):
         port = free_port()
         cmd = [sys.executable, str(ROOT / "chat.py"), "--port", str(port), "--code", "4821"]
         host = subprocess.Popen(cmd + ["--host", "--name", "ホスト"], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
-        banner = [host.stdout.readline() for _ in range(4)]
-        self.assertIn("ホストとして待機中", banner[0])
-        self.assertIn(f":{port}", banner[1])          # 既定でないポートは IP に付けて見せる
-        self.assertIn("4821", banner[2])
+        banner = read_banner(host.stdout)
+        self.assertIn("チャットを待っています", banner[1])
+        self.assertIn(f":{port}", banner[2])          # 既定でないポートは IP に付けて見せる
+        self.assertIn("4 8 2 1", banner[3])            # 合言葉は 1 字ずつ空ける
+        command = next(line for line in banner if "相手の画面で" in line)  # 枠の下の、相手の画面で打つ 1 行
+        self.assertIn(f"--join ", command)
+        self.assertIn(f":{port} --code 4821", command)
+        self.assertIn("ブラウザで  ", "".join(banner))  # 相手のページ（ポート+1）の住所か、出せない理由も枠に出す
 
         joiner = subprocess.run(
             cmd + ["--join", f"127.0.0.1", "--name", "相手"],
             input="こんにちは\n/quit\n", capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=10,
         )
-        host_out, _ = host.communicate(timeout=10)
+        # 待つ側は相手が抜けたのを受けて自分で終わる。先に stdin を閉じると、待つ側が自分から
+        # 終わる道と競い、「抜けました」を出す前に終わることがある（2026-11-26、12 回に 1 回落ちた）。
+        host.wait(timeout=10)
+        host_out = host.stdout.read()
+        host.stdin.close(); host.stdout.close()
         self.assertEqual(joiner.returncode, 0, joiner.stderr)
         self.assertIn("ホスト とつながりました", joiner.stdout)
-        self.assertIn("相手> こんにちは", host_out)
-        self.assertIn("[切断] 相手", host_out)
+        self.assertRegex(host_out, r"相手 › こんにちは")
+        self.assertIn("相手 が抜けました", host_out)  # 新しいバージョンどうしは「抜ける」の枠が届く
         self.assertEqual(host.returncode, 0)
 
     def test_join_with_wrong_code_exits_with_error(self):
@@ -260,13 +291,12 @@ class CommandLineTest(unittest.TestCase):
         base = [sys.executable, str(ROOT / "chat.py"), "--port", str(port)]
         host = subprocess.Popen(base + ["--host", "--code", "1111"], stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, text=True, encoding="utf-8", env=ENV)
-        for _ in range(4):
-            host.stdout.readline()
+        read_banner(host.stdout)
         bad = subprocess.run(base + ["--join", "127.0.0.1", "--code", "2222"],
                              capture_output=True, text=True, encoding="utf-8", env=ENV, timeout=10)
         self.assertEqual(bad.returncode, 1)
         self.assertIn("合言葉がちがいます", bad.stdout)
-        self.assertIn("[断りました]", host.stdout.readline())
+        self.assertIn("127.0.0.1: 合言葉がちがいます（残り 4 回）", host.stdout.readline())
         host.kill(); host.communicate()
 
 

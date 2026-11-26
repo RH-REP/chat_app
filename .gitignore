@@ -8,3 +8,5 @@ data/
 backup/
 received/
 docs/spec/
+.chat_state.json
+.chat_state.json.tmp

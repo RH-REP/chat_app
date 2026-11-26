@@ -1,0 +1,101 @@
+/* chat_app のページの見た目。色は theme.css（warm_paper_blue の写し）の変数を使う。 */
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: var(--size-base)/var(--line-height) var(--font-sans); }
+/* 部品の見た目は app の欄の中だけに当てる（「!」の feedback.js の窓には当てない） */
+:is(.app, .card, #chat) :is(button, input) { font: inherit; color: inherit; }
+:is(.app, .card, #chat) button { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  padding: 5px 14px; cursor: pointer; min-height: 36px; }
+:is(.app, .card, #chat) button:hover:not(:disabled) { background: var(--hover); }
+:is(.app, .card, #chat) button:disabled { opacity: .5; cursor: default; }
+:is(.app, .card, #chat) button.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+:is(.app, .card, #chat) button.pri:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+:is(.app, .card, #chat) input { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  padding: 6px 10px; width: 100%; }
+:is(.app, .card, #chat) :is(input:focus, button:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mono { font-family: var(--font-mono); }
+.muted, .hint { color: var(--muted); font-size: 13px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); }
+
+/* 発言の欄（両方のページで同じ） */
+.log { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.log > * { flex-shrink: 0; }
+.msg { max-width: 75%; padding: 5px 11px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border);
+       align-self: flex-start; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.me { align-self: flex-end; background: var(--accent-soft); border-color: var(--accent-soft); }
+.msg small { color: var(--muted); margin-right: 6px; font-size: 12px; }
+.note { align-self: center; color: var(--muted); font-size: 13px; text-align: center; overflow-wrap: anywhere; }
+.note.ok { color: var(--ok); }
+.note.error { color: #b3261e; }
+@media (prefers-color-scheme: dark) { .note.error { color: #ff8a7a; } }
+.rows { align-self: center; font: 13px/1.5 var(--font-mono); color: var(--muted); white-space: pre; margin: 0; overflow-x: auto; max-width: 100%; }
+.file { align-self: flex-start; border: 1px solid var(--accent); border-radius: 12px; padding: 6px 12px; font-size: 14px; }
+.file a { color: var(--accent); font-weight: 600; margin-left: 8px; }
+.bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.bar b { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+/* ブラウザの版（手元のページ） */
+body.local { display: flex; flex-direction: column; }
+.top { display: flex; gap: 10px; align-items: baseline; padding: 8px 56px 8px 16px; border-bottom: 1px solid var(--border);
+       background: var(--surface); }
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 290px 1fr; }
+.side { border-right: 1px solid var(--border); background: var(--surface); padding: 14px; display: flex; flex-direction: column;
+        gap: 18px; overflow-y: auto; }
+.side form { display: grid; gap: 8px; }
+.side label { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+.side label input { color: var(--text); font-size: 15px; }
+#code { letter-spacing: .3em; }
+.msg-ok { color: var(--ok); }
+.side .msg { all: unset; display: block; min-height: 1.4em; font-size: 13px; color: var(--muted); }
+.side .msg.error { color: #b3261e; }
+@media (prefers-color-scheme: dark) { .side .msg.error { color: #ff8a7a; } }
+.kv { display: grid; grid-template-columns: 5.5em 1fr; align-items: baseline; gap: 4px; margin: 2px 0; overflow-wrap: anywhere; }
+.kv span { color: var(--muted); font-size: 13px; }
+.big { font-size: 17px; }
+.code { font: 700 30px/1.2 var(--font-mono); letter-spacing: .25em; color: var(--accent); }
+.side-foot { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.main { display: grid; grid-template-rows: auto 1fr auto auto auto; min-height: 0; }
+.st { padding: 7px 14px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface); }
+.st.ok { color: var(--ok); }
+.st.quiet { color: #8a6d1d; }
+.st.lost { color: #b3261e; }
+@media (prefers-color-scheme: dark) { .st.quiet { color: #d7ba7d; } .st.lost { color: #ff8a7a; } }
+.main .log { min-height: 0; }
+.log.drag { outline: 2px dashed var(--accent); outline-offset: -8px; background: var(--accent-soft); }
+.ask { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin: 0 12px 8px;
+       padding: 10px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft); }
+.prog { margin: 0 12px 8px; font-size: 13px; color: var(--muted); }
+.in { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+.in input[type=text], .in #text { flex: 1; min-width: 0; }
+.drop { position: fixed; inset: auto 0 0 0; padding: 12px; text-align: center; background: var(--accent); color: var(--on-accent);
+        pointer-events: none; }
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .side { border-right: 0; border-bottom: 1px solid var(--border); max-height: 48vh; }
+  .side-foot { margin-top: 0; }
+  .main { min-height: 60vh; }
+  .in #fileBtn { padding: 5px 8px; }
+}
+
+/* 相手のページ（スマホで使う大きさ） */
+body.guest { display: flex; flex-direction: column; height: 100%; }
+.guest .head { padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex;
+               justify-content: space-between; align-items: center; gap: 8px; }
+.guest .head .leave { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  color: var(--text); font: inherit; padding: 6px 14px; min-height: 40px; cursor: pointer; }
+.guest .head #who { flex: 1; text-align: right; }
+.guest .card { max-width: 420px; width: 100%; margin: 24px auto; padding: 18px 16px; display: grid; gap: 12px; }
+.guest .card input { font-size: 18px; padding: 10px 12px; min-height: 48px; }
+.guest .card input.code-in { font: 26px var(--font-mono); letter-spacing: .4em; }
+.guest .card button { min-height: 48px; font-size: 17px; }
+.guest .err { color: #b3261e; min-height: 1.4em; font-size: 14px; }
+@media (prefers-color-scheme: dark) { .guest .err { color: #ff8a7a; } }
+.guest #chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.guest .log { flex: 1; min-height: 0; }
+.guest .msg { max-width: 85%; }
+.guest .in { padding: 8px; gap: 6px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+.guest .in input { font-size: 16px; min-height: 44px; }
+.guest .in button { min-height: 44px; min-width: 44px; padding: 5px 12px; }
+.guest .prog { margin: 6px 10px; }

@@ -1,0 +1,35 @@
+/* warm_paper_blue、2026-11-26 に写した（tech_stack/artwork/themes/warm_paper_blue/theme.css）。 */
+:root {
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --text: #1d2330;
+  --muted: #5d6472;
+  --border: #dcd9d0;
+  --accent: #2f6fbd;
+  --accent-soft: #e3edf9;
+  --on-accent: #ffffff;
+  --ok: #2e7d4f;
+  --hover: #efece4;
+  --radius: 9px;
+  --shadow: 0 6px 24px rgba(0,0,0,.14);
+  --font-sans: system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+  --size-base: 15px;
+  --line-height: 1.6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --surface: #1f2228;
+    --text: #e8e9ec;
+    --muted: #9aa1ad;
+    --border: #2c3038;
+    --accent: #5b9be0;
+    --accent-soft: #1d2a3a;
+    --on-accent: #0d1320;
+    --ok: #5cc08a;
+    --hover: #1f2735;
+    --shadow: 0 6px 24px rgba(0,0,0,.5);
+  }
+}

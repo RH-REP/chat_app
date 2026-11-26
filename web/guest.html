@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>chat_app</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="guest">
+<div class="head"><b>chat_app</b><span class="muted" id="who"></span><button type="button" id="leaveBtn" class="leave" hidden>抜ける</button></div>
+
+<form class="card" id="login" autocomplete="off" hidden>
+  <div class="muted">待つ側の画面に出ている合言葉を入れてください</div>
+  <input id="code" class="code-in" inputmode="numeric" maxlength="12" placeholder="合言葉" aria-label="合言葉">
+  <input id="name" maxlength="30" placeholder="名前" aria-label="名前">
+  <div class="err" id="err" role="alert"></div>
+  <button class="pri" type="submit" id="go">つなぐ</button>
+</form>
+
+<div class="card" id="closed" hidden>
+  <div id="closedText"></div>
+</div>
+
+<div id="chat" hidden>
+  <div class="st" id="status"></div>
+  <div class="log" id="log" aria-live="polite"></div>
+  <div class="prog" id="prog" hidden><span id="progText"></span><div class="bar"><b id="progBar"></b></div></div>
+  <form class="in" id="inForm" autocomplete="off">
+    <input id="text" placeholder="入力">
+    <input type="file" id="file" hidden>
+    <button type="button" id="fileBtn" aria-label="ファイルを送る">＋</button>
+    <button class="pri" type="submit" id="sendBtn">送る</button>
+  </form>
+</div>
+<script src="guest.js"></script>
+</body>
+</html>

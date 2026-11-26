@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chat_app</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="local">
+<header class="top"><b>chat_app</b><span class="muted">ブラウザの版</span></header>
+<div class="app">
+  <aside class="side">
+    <section id="connect" class="panel" data-screen="local.connect">
+      <h2>チャットにつなぐ</h2>
+      <form id="joinForm" autocomplete="off">
+        <label>相手の IP<input id="ip" inputmode="decimal" placeholder="192.168.0.9" spellcheck="false"></label>
+        <label>合言葉<input id="code" class="mono" maxlength="4" inputmode="numeric"></label>
+        <label>自分の名前<input id="name" maxlength="30"></label>
+        <div class="row">
+          <button class="pri" type="submit" id="joinBtn">つなぐ</button>
+          <button type="button" id="hostBtn">待つ側になる</button>
+        </div>
+        <p class="msg" id="formMsg" role="status"></p>
+      </form>
+    </section>
+    <section id="waiting" class="panel" data-screen="local.waiting" hidden>
+      <h2>チャットを待っています</h2>
+      <div class="hint">相手に伝える</div>
+      <div class="kv"><span>IP</span><b class="mono big" id="wIp"></b></div>
+      <div class="kv"><span>合言葉</span><b class="code" id="wCode"></b></div>
+      <div class="kv" id="wPageRow"><span>ブラウザで</span><b class="mono" id="wUrl"></b></div>
+      <button type="button" id="cancelBtn">待つのをやめる</button>
+    </section>
+    <section id="peerBox" class="panel" data-screen="local.peer" hidden>
+      <h2>話している相手</h2>
+      <div class="kv"><span>名前</span><b id="pName"></b></div>
+      <div class="kv"><span>IP</span><b class="mono" id="pIp"></b></div>
+      <button type="button" id="leaveBtn">抜ける</button>
+    </section>
+    <div class="side-foot">
+      <button type="button" id="openBtn">保存先を開く</button>
+      <button type="button" id="quitBtn">終わる</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="st" id="status" data-screen="local.status">つないでいません</div>
+    <div class="log" id="log" data-screen="local.log" aria-live="polite"></div>
+    <div class="ask" id="ask" data-screen="local.ask" data-screen-layer="4" hidden>
+      <span id="askText"></span>
+      <span class="row"><button class="pri" type="button" id="askYes">受け取る</button><button type="button" id="askNo">断る</button></span>
+    </div>
+    <div class="prog" id="prog" hidden><span id="progText"></span><div class="bar"><b id="progBar"></b></div></div>
+    <form class="in" id="inForm" data-screen="local.input" autocomplete="off">
+      <input id="text" placeholder="入力して Enter で送る" disabled>
+      <input type="file" id="file" multiple hidden>
+      <button type="button" id="fileBtn" disabled>ファイルを選ぶ…</button>
+      <button class="pri" type="submit" id="sendBtn" disabled>送る</button>
+    </form>
+  </main>
+</div>
+<div class="drop" id="drop" hidden>ここにドロップすると相手に送ります</div>
+<script src="feedback.js"></script>
+<script src="local.js"></script>
+</body>
+</html>
