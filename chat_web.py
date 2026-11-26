@@ -26,6 +26,7 @@ import re
 import secrets
 import shutil
 import socket
+import socketserver
 import sys
 import tempfile
 import threading
@@ -67,6 +68,13 @@ class QuietServer(ThreadingHTTPServer):
 
     daemon_threads = True
     allow_reuse_address = sys.platform != "win32"  # Windows の SO_REUSEADDR は使用中のポートにも重ねてしまう
+
+    def server_bind(self) -> None:
+        # HTTPServer.server_bind は socket.getfqdn で名前を逆引きし、DNS によっては数秒止まる
+        # （GitHub Actions の macOS で起動が 3 秒を超えた）。名前は使わないので引かない。
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name, self.server_port = str(host), port
 
     def handle_error(self, request, client_address) -> None:  # noqa: ANN001
         err = sys.exc_info()[1]

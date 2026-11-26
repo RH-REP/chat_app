@@ -242,7 +242,10 @@ class SendCommandTest(unittest.TestCase):
     def test_send_accept_and_chat_continues(self):
         data = os.urandom(300_000)
         (self.src / "報告 書.bin").write_bytes(data)
-        self.sa.handle_input(f"/send {self.src}/報告\\ 書.bin")  # ドラッグで入る \ の空白
+        if sys.platform == "win32":  # Windows のドラッグは引用符で囲む（\ は場所の区切り）
+            self.sa.handle_input(f'/send "{self.src / "報告 書.bin"}"')
+        else:  # Mac・Linux のドラッグは \ で空白を逃がす
+            self.sa.handle_input(f"/send {self.src}/報告\\ 書.bin")
         self.vb.wait_for("A からファイルが届きました")
         self.vb.wait_for("名前    報告 書.bin")
         self.assertTrue(self.vb.wait_until(lambda: self.vb.prompts and self.vb.prompts[-1]))
