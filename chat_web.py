@@ -720,7 +720,9 @@ class LocalApp:
         self.no_page, self.open_browser, self.opener = no_page, open_browser, opener
         self.grace, self.first_grace, self.keepalive = grace, first_grace, keepalive
         self.bind, self.page_bind = bind, page_bind
-        self.session_args = session_args or {}
+        self.session_args = dict(session_args or {})
+        # 受け取りの確認を出さずに保存する（ページの「確認せずに受け取る」。--yes で初めから入る）
+        self.auto_accept = bool(self.session_args.pop("auto_accept", False))
         self.fixed_code = code
         self.key = secrets.token_urlsafe(18)
         self.events = EventLog()
@@ -897,7 +899,8 @@ class LocalApp:
     def _start_session(self, peer) -> None:  # noqa: ANN001
         view = WebView(self)
         session = chat.ChatSession(peer, view, save_dir=self.save_dir, max_size=self.max_size,
-                                   on_closed=self._on_closed, opener=self.opener, **self.session_args)
+                                   on_closed=self._on_closed, opener=self.opener, auto_accept=self.auto_accept,
+                                   **self.session_args)
         view.session = session
         with self._lock:
             self.session, self.peer = session, peer
@@ -937,12 +940,23 @@ class LocalApp:
         session.answer_offer(accept)
         return 200, {"ok": True}
 
+    def set_auto_accept(self, on: bool) -> Tuple[int, dict]:
+        """「確認せずに受け取る」。今のチャットにも、この後のチャットにも効く。"""
+        with self._lock:
+            self.auto_accept = on
+            session = self.session
+        if session is not None:
+            session.auto_accept = on
+            if on and session._offer is not None:  # 確認を出している最中なら、そのまま受け取る
+                session.answer_offer(True)
+        return 200, {"ok": True, "auto_accept": on}
+
     def upload(self, handler: _Handler, name: str) -> Tuple[int, dict]:
         session = self.session
         if session is None:
             return 409, {"error": "つながっていません"}
         if not session.framed:
-            session.ui.notice("相手が古いバージョンなので使えません。ファイルはターミナルの版の「ファイルを送る」で送ってください",
+            session.ui.notice("相手が古いバージョンなので送れません。相手に chat_app を新しくしてもらってください",
                               "error")
             return 409, {"error": "相手が古いバージョンなので使えません"}
         if session._sending:
@@ -1020,6 +1034,7 @@ class LocalApp:
                         st = app._state()
                     st.update(defaults={"ip": app.state.get("ip", ""), "name": app.name,
                                         "peer_name": app.state.get("peer_name", ""), "code": app.fixed_code},
+                              auto_accept=app.auto_accept,
                               last_event=app.events.next_id - 1)
                     return self._json(200, st)
                 if path == "/api/events":
@@ -1050,6 +1065,8 @@ class LocalApp:
                     return self._json(*app.send(str(body.get("text", ""))))
                 if path == "/api/answer":
                     return self._json(*app.answer(bool(body.get("accept"))))
+                if path == "/api/auto":
+                    return self._json(*app.set_auto_accept(bool(body.get("on"))))
                 if path == "/api/open":
                     app.open_save_dir()
                     return self._json(200, {"ok": True})
@@ -1069,7 +1086,7 @@ def run_local(args, name: str, state: dict) -> int:  # noqa: ANN001
     """chat.py --web（メニューの 5）。ページを開き、閉じられるか Ctrl+C まで動く。"""
     app = LocalApp(name, chat_port=args.port, save_dir=Path(args.save_dir).expanduser().resolve(),
                    max_size=args.max_size * 1024**2, state=state, state_path=chat.STATE_PATH,
-                   no_page=args.no_page, code=args.code or "")
+                   no_page=args.no_page, code=args.code or "", session_args={"auto_accept": args.yes})
     app.start()
     view = chat_term.PlainView(sys.stdout)
     view.notice(f"ブラウザの版を開きました: {app.url}")

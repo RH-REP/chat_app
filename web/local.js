@@ -165,6 +165,7 @@
   $("quitBtn").addEventListener("click", () => api("/api/quit"));
   $("askYes").addEventListener("click", () => api("/api/answer", { accept: true }));
   $("askNo").addEventListener("click", () => api("/api/answer", { accept: false }));
+  $("autoAccept").addEventListener("change", (e) => api("/api/auto", { on: e.target.checked }));
 
   // ---- 入力の行 ----
   $("inForm").addEventListener("submit", async (e) => {
@@ -199,7 +200,7 @@
   let queue = Promise.resolve();
   function sendFiles(files) {
     if (phase !== "chat") return addNotice("つながってから送ってください", "error");
-    if (!framed) return addNotice("相手が古いバージョンなので使えません", "error");
+    if (!framed) return addNotice("相手が古いバージョンなので送れません。相手に chat_app を新しくしてもらってください", "error");
     for (const f of files) {
       queue = queue.then(async () => {
         if (phase !== "chat") return;
@@ -239,6 +240,7 @@
     $("ip").value = st.defaults.ip || "";
     $("name").value = st.defaults.name || "";
     $("code").value = st.defaults.code || "";
+    $("autoAccept").checked = !!st.auto_accept;
     setPhase(st);
     if (!$("connect").hidden) ($("ip").value ? ($("name").value ? $("code") : $("name")) : $("ip")).focus();
     const es = new EventSource("/api/events?k=" + encodeURIComponent(KEY) + "&since=0");
@@ -255,7 +257,7 @@
   // ---- 改善のコメント（右上の !）。発言・名前・IP は入れない ----
   if (window.AppFeedback) {
     AppFeedback.install({
-      app: "chat_app", version: "2026-11-26a", repo: "RH-REP/chat_app",
+      app: "chat_app", version: "2026-11-27a", repo: "RH-REP/chat_app",
       screenshot: "off", isPublic: true, log: false,
       getContext: () => ({ summary: "ブラウザの版・" + phase + (phase === "chat" ? (framed ? "・相手は新しいバージョン" : "・相手は古いバージョン") : "") }),
     });

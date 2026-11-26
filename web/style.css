@@ -56,6 +56,8 @@ body.local { display: flex; flex-direction: column; }
 .big { font-size: 17px; }
 .code { font: 700 30px/1.2 var(--font-mono); letter-spacing: .25em; color: var(--accent); }
 .side-foot { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.app .check { display: flex; align-items: center; gap: 6px; width: 100%; font-size: 13px; color: var(--muted, #555); }
+.app .check input { width: auto; margin: 0; }
 .main { display: grid; grid-template-rows: auto 1fr auto auto auto; min-height: 0; }
 .st { padding: 7px 14px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--surface); }
 .st.ok { color: var(--ok); }

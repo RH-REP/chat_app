@@ -226,7 +226,7 @@ class LocalChatTest(LocalBase):
         self.assertEqual(self.post("/api/send", {"text": "古いバージョンへ"})[0], 200)
         status, _, body = self.post("/api/upload?name=a.txt", b"abc", **{"Content-Type": "application/octet-stream"})
         self.assertEqual(status, 409)
-        es.wait_for(lambda e: e["type"] == "notice" and "相手が古いバージョンなので使えません" in e["text"])
+        es.wait_for(lambda e: e["type"] == "notice" and "相手が古いバージョンなので送れません" in e["text"])
         self.assertEqual(self.post("/api/leave")[0], 200)
         t.join(3)
         self.assertEqual(got, ["古いバージョンへ"])
@@ -273,6 +273,34 @@ class LocalChatTest(LocalBase):
         view.wait_for("送りました  q.txt")
         self.assertEqual((self.base / "received" / "q.txt").read_text(encoding="utf-8"), "Q")
         es.wait_for(lambda e: e["type"] == "ask_done")
+        session.quit()
+        host.close()
+
+
+    def test_auto_accept_saves_without_asking(self):
+        es = self.events()
+        status, _, body = self.post("/api/auto", {"on": True})
+        self.assertEqual(status, 200, body)
+        status, _, body = request(self.app.port, "GET", "/api/state", None, self.key_headers())
+        self.assertTrue(json.loads(body)["auto_accept"])
+        host = self.join()  # つないだ後のチャットにも効く
+        view = RecordingView()
+        session = chat.ChatSession(host, view, save_dir=self.base / "unused")
+        session.start()
+        src = self.base / "auto.txt"
+        src.write_text("A", encoding="utf-8")
+        session.send_path(str(src))
+        view.wait_for("送りました  auto.txt")
+        self.assertEqual((self.base / "received" / "auto.txt").read_text(encoding="utf-8"), "A")
+        self.assertFalse([e for e in es.events if e["type"] == "ask"])  # 受け取りの確認は出さない
+        # 切ると、また確認を出す
+        self.assertEqual(self.post("/api/auto", {"on": False})[0], 200)
+        src2 = self.base / "ask.txt"
+        src2.write_text("B", encoding="utf-8")
+        session.send_path(str(src2))
+        es.wait_for(lambda e: e["type"] == "ask")
+        self.assertEqual(self.post("/api/answer", {"accept": False})[0], 200)
+        view.wait_for("断られました")
         session.quit()
         host.close()
 
